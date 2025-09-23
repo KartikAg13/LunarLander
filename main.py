@@ -145,15 +145,11 @@ class GridEnv(gym.Env):
             a_max=self.grid_size - 1,
         )
         direction = self.direction[action2]
-
-        terminated = np.array_equal(self.snake1_location, self.fruit1_location)
-
-        truncated = False
-        reward = 1 if terminated else -0.1
-
-        observation = self._get_obs()
-        info = self._get_info()
-        return observation, reward, terminated, truncated, info
+        self.snake2_location = np.clip(
+            a=self.snake2_location + direction,
+            a_min=0,
+            a_max=self.grid_size - 1,
+        )
 
     def spawn_fruits(self, spawn: int):
         while True:
