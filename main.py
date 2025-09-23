@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import gymnasium as gym
+import pygame
 
 
 class DQN(nn.Module):
@@ -24,14 +25,19 @@ class DQN(nn.Module):
 
 
 class GridEnv(gym.Env):
-    def __init__(self, size: int) -> None:
+    def __init__(self, size: int, mode: str | None) -> None:
         super(GridEnv, self).__init__()
         # size of the grid
-        self.size = size
+        self.grid_size = size
+        self.render_mode = mode
+        self.cell_size = 20
+        self.window_size = self.grid_size * self.cell_size
 
         # spawn locations
-        self.agent_location = np.array([-1, -1], dtype=np.int32)
-        self.target_location = np.array([-1, -1], dtype=np.int32)
+        self.snake1_location = np.array([-1, -1], dtype=np.int32)
+        self.snake2_location = np.array([-1, -1], dtype=np.int32)
+        self.fruit1_location = np.array([-1, -1], dtype=np.int32)
+        self.fruit2_location = np.array([-1, -1], dtype=np.int32)
 
         # observation space
         self.surrounding_space = gym.spaces.Box(-1, 1, (4, 0), np.int32)
@@ -52,16 +58,42 @@ class GridEnv(gym.Env):
             3: np.array([0, -1]),  # down
         }
 
+        if self.render_mode == "human":
+            pygame.init()
+            self.screen = pygame.display.set_mode(
+                (self.window_size * 2 + 50, self.window_size + 100)
+            )
+            pygame.display.set_caption("Snake RL Training")
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.Font(None, 36)
+            self.small_font = pygame.font.Font(None, 24)
+
+        self.reset()
+
     def _get_obs(self):
         # returns the current state
-        return {"agent": self.agent_location, "target": self.target_location}
+        return {
+            "snake1": self.snake1_location,
+            "snake2": self.snake2_location,
+            "fruit1": self.fruit1_location,
+            "fruit2": self.fruit2_location,
+        }
 
     def _get_info(self):
         # returns the distance between snake and fruit
         return {
-            "distance": np.linalg.norm(
-                self.agent_location - self.target_location, ord=1
-            )
+            "distance11": np.linalg.norm(
+                self.snake1_location - self.fruit1_location, ord=1
+            ),
+            "distance12": np.linalg.norm(
+                self.snake1_location - self.fruit2_location, ord=1
+            ),
+            "distance21": np.linalg.norm(
+                self.snake2_location - self.fruit1_location, ord=1
+            ),
+            "distance22": np.linalg.norm(
+                self.snake2_location - self.fruit2_location, ord=1
+            ),
         }
 
     @override
@@ -70,28 +102,51 @@ class GridEnv(gym.Env):
         super().reset(seed=seed)
 
         # spawn the agent
-        self.agent_location = self.np_random.integers(
-            0, self.size, size=2, dtype=np.int32
+        self.snake1_location = self.np_random.integers(
+            0, self.grid_size, size=2, dtype=np.int32
         )
+        self.snake2_location = self.snake1_location
+        while np.array_equal(self.snake1_location, self.snake2_location):
+            self.snake2_location = self.np_random.integers(
+                0, self.grid_size, size=2, dtype=np.int32
+            )
+
+        self.snake1 = {
+            "location": self.snake1_location,
+            "score": 0,
+            "color": (0, 255, 0),
+        }
+        self.snake2 = {
+            "location": self.snake2_location,
+            "score": 0,
+            "color": (0, 0, 255),
+        }
 
         # spawn the target
-        self.target_location = self.agent_location
-        while np.array_equal(self.agent_location, self.target_location):
-            self.target_location = self.np_random.integers(
-                0, self.size, size=2, dtype=np.int32
-            )
+        self.fruit1_location = self.spawn_fruits(1)
+        self.fruit2_location = self.spawn_fruits(2)
+        self.fruit_color = (255, 0, 0)
+
+        self.steps: int = 0
+        self.max_steps: int = 500
+        self.time_left: int = 60
+        self.frame_count: int = 0
 
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
 
-    def step(self, action: int):
+    def step(self, action1: int, action2: int):
         # take the action and update location
-        direction = self.direction[action]
-        self.agent_location = np.clip(
-            a=self.agent_location + direction, a_min=0, a_max=self.size - 1
+        direction = self.direction[action1]
+        self.snake1_location = np.clip(
+            a=self.snake1_location + direction,
+            a_min=0,
+            a_max=self.grid_size - 1,
         )
-        terminated = np.array_equal(self.agent_location, self.target_location)
+        direction = self.direction[action2]
+
+        terminated = np.array_equal(self.snake1_location, self.fruit1_location)
 
         truncated = False
         reward = 1 if terminated else -0.1
@@ -99,6 +154,26 @@ class GridEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
         return observation, reward, terminated, truncated, info
+
+    def spawn_fruits(self, spawn: int):
+        while True:
+            fruit = self.np_random.integers(
+                0, self.grid_size, size=2, dtype=np.int32
+            )
+            if np.array_equal(fruit, self.snake1_location) or np.array_equal(
+                fruit, self.snake2_location
+            ):
+                continue
+            else:
+                if (
+                    spawn == 1 and np.array_equal(fruit, self.fruit2_location)
+                ) or (
+                    spawn == 2 and np.array_equal(fruit, self.fruit1_location)
+                ):
+                    continue
+                else:
+                    break
+        return fruit
 
 
 def main():

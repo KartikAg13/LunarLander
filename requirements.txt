@@ -1,4 +1,0 @@
-gym[box2d]
-numpy
-tensorflow
-pyglet
