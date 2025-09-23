@@ -1,7 +1,26 @@
 from typing import override
 import numpy as np
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 import gymnasium as gym
+
+
+class DQN(nn.Module):
+    def __init__(
+        self, input_size: int, hidden_size: int, output_size: int
+    ) -> None:
+        super(DQN, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.leaky_relu(self.fc2(x))
+        return F.softmax(self.fc3(x))
 
 
 class GridEnv(gym.Env):
@@ -84,3 +103,4 @@ class GridEnv(gym.Env):
 
 def main():
     # gym.register("gymnasium_env/GridEnv-v0", GridEnv, 500)
+    ...
